@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ES6 3D Platformer</title>
+  <style>
+    * { margin: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+      background: #c8d4e0;
+    }
+    canvas { display: block; }
+    #hud {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      color: #e6edf3;
+      font-size: 14px;
+      line-height: 1.6;
+      text-shadow: 0 1px 2px #000;
+      pointer-events: none;
+      opacity: 0.9;
+    }
+    #hud kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+    }
+    .main-menu {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      padding: 2rem;
+      background: linear-gradient(160deg, rgba(15, 18, 28, 0.92), rgba(30, 40, 72, 0.88));
+      color: #e8ecf5;
+      pointer-events: auto;
+    }
+    .main-menu--hidden {
+      display: none;
+    }
+    .main-menu h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin: 0;
+    }
+    .main-menu .subtitle {
+      margin: 0;
+      opacity: 0.85;
+      font-size: 1rem;
+    }
+    .char-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: center;
+      max-width: 44rem;
+    }
+    .char-card {
+      cursor: pointer;
+      text-align: left;
+      padding: 1rem 1.15rem;
+      min-width: 11rem;
+      border-radius: 10px;
+      border: 2px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.25);
+      color: inherit;
+      font: inherit;
+      transition: border-color 0.15s, background 0.15s, transform 0.12s;
+    }
+    .char-card:hover {
+      border-color: rgba(129, 186, 255, 0.55);
+      background: rgba(30, 44, 90, 0.45);
+      transform: translateY(-2px);
+    }
+    .char-card.selected {
+      border-color: #7cb8ff;
+      background: rgba(40, 80, 140, 0.45);
+      box-shadow: 0 0 0 1px rgba(124, 184, 255, 0.35);
+    }
+    .char-card .char-name {
+      display: block;
+      font-weight: 650;
+      font-size: 1.05rem;
+      margin-bottom: 0.25rem;
+    }
+    .char-card .char-desc {
+      display: block;
+      font-size: 0.82rem;
+      opacity: 0.8;
+      line-height: 1.35;
+    }
+    #menuStart {
+      margin-top: 0.5rem;
+      padding: 0.65rem 2rem;
+      font-size: 1.05rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: linear-gradient(180deg, #4d9fff, #2563eb);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+    }
+    #menuStart:hover {
+      filter: brightness(1.08);
+    }
+  </style>
+</head>
+<body>
+  <div id="mainMenu" class="main-menu" aria-label="Character select">
+    <h1>Paris Rooftop Run</h1>
+    <p class="subtitle">Pick a hero, then start the run.</p>
+    <div class="char-grid">
+      <button type="button" class="char-card selected" data-character="ladybug">
+        <span class="char-name">Ladybug</span>
+        <span class="char-desc">2D artwork · always faces the camera</span>
+      </button>
+      <button type="button" class="char-card" data-character="renarouge">
+        <span class="char-name">Rena Rouge</span>
+        <span class="char-desc">2D artwork · camera-facing sprite (PNG)</span>
+      </button>
+    </div>
+    <button type="button" id="menuStart">Start run</button>
+  </div>
+  <div id="hud">
+    <span id="combatHud"></span><br />
+    <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> move · <kbd>Space</kbd> jump<br />
+    <strong>Stomp</strong> Sapotis from above · reach the gold roof<br />
+    Click canvas to lock pointer
+  </div>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
