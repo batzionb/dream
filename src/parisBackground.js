@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 
-/** Wide Paris / Eiffel view (Unsplash, hotlink-friendly for demos). */
-const PARIS_IMAGE =
-  'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=2400&q=85';
+/** Local Paris / Eiffel backdrop (served from repo assets). */
+const PARIS_IMAGE = new URL('../assets/paris.jpg', import.meta.url).href;
 
 /**
  * Replaces the solid sky with a photographic Paris backdrop.
@@ -11,7 +10,6 @@ const PARIS_IMAGE =
  */
 export function applyParisBackground(scene, renderer) {
   const loader = new THREE.TextureLoader();
-  loader.setCrossOrigin('anonymous');
 
   loader.load(
     PARIS_IMAGE,
@@ -23,7 +21,7 @@ export function applyParisBackground(scene, renderer) {
     },
     undefined,
     () => {
-      console.warn('Could not load Paris background (network/CORS). Using default sky.');
+      console.warn('Could not load Paris background image. Using default sky.');
     }
   );
 }
