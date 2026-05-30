@@ -157,10 +157,62 @@ function textureFromCanvas(canvas) {
   return tex;
 }
 
+/** Crisper sampling for character sprites (no mip blur). */
+function textureFromCanvasSharp(canvas) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  return tex;
+}
+
+/** Light unsharp mask so Rena's artwork reads crisper in-game. */
+function sharpenCanvas(canvas, strength = 0.42) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const w = canvas.width;
+  const h = canvas.height;
+  const src = ctx.getImageData(0, 0, w, h);
+  const out = ctx.createImageData(w, h);
+  const s = src.data;
+  const d = out.data;
+  const k = strength;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (s[i + 3] < 8) {
+        d[i + 3] = 0;
+        continue;
+      }
+      for (let c = 0; c < 3; c++) {
+        if (x === 0 || x === w - 1 || y === 0 || y === h - 1) {
+          d[i + c] = s[i + c];
+          continue;
+        }
+        const i4 = i + c;
+        const blurred =
+          s[((y - 1) * w + x) * 4 + c] +
+          s[((y + 1) * w + x) * 4 + c] +
+          s[(y * w + (x - 1)) * 4 + c] +
+          s[(y * w + (x + 1)) * 4 + c];
+        const sharp = s[i4] * (1 + 4 * k) - k * blurred;
+        d[i4] = sharp < 0 ? 0 : sharp > 255 ? 255 : sharp;
+      }
+      d[i + 3] = s[i + 3];
+    }
+  }
+
+  ctx.putImageData(out, 0, 0);
+  return canvas;
+}
+
 /**
  * @param {'black' | 'border' | 'none'} keyMode — how to remove / use background
+ * @param {boolean} [sharp=false] sharper texture + optional unsharp pass
  */
-function createBillboardFromImage(scene, start, url, groupName, keyMode) {
+function createBillboardFromImage(scene, start, url, groupName, keyMode, sharp = false) {
   const group = new THREE.Group();
   group.name = groupName;
   group.position.copy(start);
@@ -173,8 +225,11 @@ function createBillboardFromImage(scene, start, url, groupName, keyMode) {
       const img = tex.image;
       tex.dispose();
 
-      const canvas = canvasFromImage(img, keyMode);
-      const map = textureFromCanvas(canvas);
+      let canvas = canvasFromImage(img, keyMode);
+      if (sharp) {
+        canvas = sharpenCanvas(canvas);
+      }
+      const map = sharp ? textureFromCanvasSharp(canvas) : textureFromCanvas(canvas);
       const aspect = img.width / img.height;
       const height = 1.68;
       const width = height * aspect;
@@ -182,7 +237,7 @@ function createBillboardFromImage(scene, start, url, groupName, keyMode) {
       const mat = new THREE.MeshBasicMaterial({
         map,
         transparent: true,
-        alphaTest: 0.02,
+        alphaTest: sharp ? 0.04 : 0.02,
         side: THREE.DoubleSide,
         depthWrite: true,
       });
@@ -201,7 +256,7 @@ function createLadybugBillboard(scene, start) {
 }
 
 function createRenaRougeBillboard(scene, start) {
-  return createBillboardFromImage(scene, start, RENAROUGE_TEX_URL, 'RenaRouge', 'border');
+  return createBillboardFromImage(scene, start, RENAROUGE_TEX_URL, 'RenaRouge', 'border', true);
 }
 
 /**
