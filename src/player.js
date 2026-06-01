@@ -398,18 +398,38 @@ export class Player {
 
   resolveAxisY(colliders) {
     const p = playerAabb(this.position);
-    for (const c of colliders) {
-      if (!aabbOverlap(p, c)) continue;
+    const feetY = this.position.y - PLAYER_HALF.y;
+    const falling = this.velocity.y < -1.5;
 
-      if (this.velocity.y >= 0) {
+    if (this.velocity.y > 0) {
+      for (const c of colliders) {
+        if (!aabbOverlap(p, c)) continue;
+        if (feetY >= c.max.y - 0.08) continue;
         this.position.y = c.min.y - PLAYER_HALF.y - 1e-4;
         this.velocity.y = 0;
-      } else {
-        this.position.y = c.max.y + PLAYER_HALF.y + 1e-4;
-        this.velocity.y = 0;
-        this.grounded = true;
+        Object.assign(p, playerAabb(this.position));
       }
-      Object.assign(p, playerAabb(this.position));
+      return;
+    }
+
+    let bestTop = -Infinity;
+    for (const c of colliders) {
+      if (!aabbOverlap(p, c)) continue;
+      const top = c.max.y;
+      const rise = top - feetY;
+      if (feetY > top + 0.2) continue;
+      if (falling) {
+        if (top > feetY + 0.05) continue;
+      } else if (rise > 0.42 || rise < -0.02) {
+        continue;
+      }
+      if (top > bestTop) bestTop = top;
+    }
+
+    if (bestTop > -Infinity) {
+      this.position.y = bestTop + PLAYER_HALF.y + 1e-4;
+      this.velocity.y = 0;
+      this.grounded = true;
     }
   }
 

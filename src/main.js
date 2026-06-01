@@ -1,9 +1,15 @@
 import * as THREE from 'three';
 import { createFollowCamera } from './gameCamera.js';
 import { createInput } from './input.js';
-import { buildLevel } from './level.js';
+import { buildLevel, disposeLevel } from './level.js';
 import { applySceneBackground } from './sceneBackground.js';
-import { livingRobotCount, resetRobots, spawnRobots, tickRobots } from './enemies.js';
+import {
+  livingEnemyCount,
+  removeEnemies,
+  resetEnemies,
+  spawnEnemies,
+  tickEnemies,
+} from './enemies.js';
 import { Player } from './player.js';
 
 const scene = new THREE.Scene();
@@ -37,11 +43,22 @@ sun.shadow.camera.top = 35;
 sun.shadow.camera.bottom = -35;
 scene.add(sun);
 
-const { colliders } = buildLevel(scene);
-const robots = await spawnRobots(scene, colliders).catch((err) => {
-  console.error('Failed to load Sapotis', err);
-  return [];
-});
+/** @type {Array<{ min: { x, y, z }, max: { x, y, z }, isGoal?: boolean }>} */
+let colliders = [];
+/** @type {THREE.Group | null} */
+let levelRoot = null;
+
+async function loadLevelForCharacter(characterId) {
+  if (levelRoot) {
+    disposeLevel(levelRoot);
+    levelRoot = null;
+  }
+  const level = buildLevel(scene, characterId);
+  levelRoot = level.root;
+  colliders = level.colliders;
+  await loadEnemiesForCharacter(characterId);
+}
+
 const input = createInput();
 
 const hud = document.getElementById('hud');
@@ -50,6 +67,10 @@ const HUD_TEMPLATE = hud.innerHTML;
 
 /** @type {Player | null} */
 let player = null;
+/** @type {import('./enemies.js').EnemyWave['enemies']} */
+let enemies = [];
+let enemyHudLabel = 'Lady Wifi left';
+let enemyStompHint = 'Stomp Lady Wifi from above';
 let clock = new THREE.Clock();
 let won = false;
 let gameStarted = false;
@@ -89,9 +110,14 @@ function applyMenuCamera() {
 
 function updateCombatHud() {
   const el = document.getElementById('combatHud');
-  if (!el || !player) return;
-  const left = livingRobotCount(robots);
-  el.textContent = `Sapotis left: ${left}`;
+  if (!el) return;
+  const left = livingEnemyCount(enemies);
+  el.textContent = `${enemyHudLabel}: ${left}`;
+}
+
+function updateStompHint() {
+  const strong = hud.querySelector('strong');
+  if (strong) strong.textContent = enemyStompHint;
 }
 
 function tryRemoveOldPlayer() {
@@ -110,6 +136,21 @@ function tryRemoveOldPlayer() {
   player = null;
 }
 
+async function loadEnemiesForCharacter(characterId) {
+  removeEnemies(scene, enemies);
+  try {
+    const wave = await spawnEnemies(scene, colliders, characterId);
+    enemies = wave.enemies;
+    enemyHudLabel = wave.hudLabel;
+    enemyStompHint = wave.stompHint;
+  } catch (err) {
+    console.error('Failed to spawn enemies:', err);
+    enemies = [];
+  }
+  updateCombatHud();
+  updateStompHint();
+}
+
 let selectedCharacter = 'ladybug';
 
 document.querySelectorAll('.char-card').forEach((card) => {
@@ -120,13 +161,17 @@ document.querySelectorAll('.char-card').forEach((card) => {
     if (id === 'ladybug' || id === 'renarouge') {
       selectedCharacter = id;
       applySceneBackground(scene, renderer, id);
+      if (!gameStarted) {
+        void loadLevelForCharacter(id);
+      }
     }
   });
 });
 
-document.getElementById('menuStart')?.addEventListener('click', () => {
+document.getElementById('menuStart')?.addEventListener('click', async () => {
   tryRemoveOldPlayer();
-  resetRobots(robots);
+  await loadLevelForCharacter(selectedCharacter);
+  resetEnemies(enemies);
   won = false;
   clock = new THREE.Clock();
   player = new Player(scene, new THREE.Vector3(0, 0.8, 0), selectedCharacter);
@@ -134,9 +179,13 @@ document.getElementById('menuStart')?.addEventListener('click', () => {
   gameStarted = true;
   hud.innerHTML = HUD_TEMPLATE;
   hud.style.visibility = 'visible';
+  updateStompHint();
+  updateCombatHud();
   mainMenu?.classList.add('main-menu--hidden');
   if (document.exitPointerLock) document.exitPointerLock();
 });
+
+await loadLevelForCharacter('ladybug');
 
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.083);
@@ -145,7 +194,7 @@ function tick() {
     applyMenuCamera();
   } else if (player && !won) {
     player.update(dt, input, colliders, camState.yaw, camera);
-    tickRobots(dt, robots, player, camera, colliders);
+    tickEnemies(dt, enemies, player, camera, colliders);
     updateCombatHud();
 
     if (player.isOnGoal(colliders)) {
