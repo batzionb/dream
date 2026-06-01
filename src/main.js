@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createFollowCamera } from './gameCamera.js';
 import { createInput } from './input.js';
 import { buildLevel } from './level.js';
-import { applyParisBackground } from './parisBackground.js';
+import { applySceneBackground } from './sceneBackground.js';
 import { livingRobotCount, resetRobots, spawnRobots, tickRobots } from './enemies.js';
 import { Player } from './player.js';
 
@@ -19,7 +19,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-applyParisBackground(scene, renderer);
+applySceneBackground(scene, renderer, 'ladybug');
 
 const hemi = new THREE.HemisphereLight(0xb1e1ff, 0x3d2f1f, 0.55);
 scene.add(hemi);
@@ -119,6 +119,7 @@ document.querySelectorAll('.char-card').forEach((card) => {
     const id = card.dataset.character;
     if (id === 'ladybug' || id === 'renarouge') {
       selectedCharacter = id;
+      applySceneBackground(scene, renderer, id);
     }
   });
 });
@@ -129,6 +130,7 @@ document.getElementById('menuStart')?.addEventListener('click', () => {
   won = false;
   clock = new THREE.Clock();
   player = new Player(scene, new THREE.Vector3(0, 0.8, 0), selectedCharacter);
+  applySceneBackground(scene, renderer, selectedCharacter);
   gameStarted = true;
   hud.innerHTML = HUD_TEMPLATE;
   hud.style.visibility = 'visible';
