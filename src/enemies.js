@@ -85,23 +85,84 @@ function canvasFromImageKeyWhiteFlood(img, minChannel = 236) {
   return canvas;
 }
 
-function aabbOverlapPlayer(center, half, px, py, pz) {
-  const pMin = { x: px - PLAYER_HALF.x, y: py - PLAYER_HALF.y, z: pz - PLAYER_HALF.z };
-  const pMax = { x: px + PLAYER_HALF.x, y: py + PLAYER_HALF.y, z: pz + PLAYER_HALF.z };
-  const rMin = { x: center.x - half.x, y: center.y - half.y, z: center.z - half.z };
-  const rMax = { x: center.x + half.x, y: center.y + half.y, z: center.z + half.z };
+const SAPOTI_SPRITE_H = 0.78;
+
+/**
+ * @param {number} px
+ * @param {number} pz
+ * @param {THREE.Vector3} center
+ * @param {{ x: number, z: number }} half
+ * @param {number} [pad=0]
+ */
+function horizontalDistSq(px, pz, center, half, pad = 0) {
+  const reach = PLAYER_HALF.x + half.x + pad;
+  const dx = px - center.x;
+  const dz = pz - center.z;
+  return { distSq: dx * dx + dz * dz, reach };
+}
+
+/**
+ * @param {import('./player.js').Player} player
+ * @param {THREE.Vector3} center
+ * @param {{ x: number, y: number, z: number }} half
+ */
+function isPlayerStompingSapoti(player, center, half) {
+  const { distSq, reach } = horizontalDistSq(
+    player.position.x,
+    player.position.z,
+    center,
+    half,
+    0.12
+  );
+  if (distSq > reach * reach) return false;
+
+  const feetY = player.position.y - PLAYER_HALF.y;
+  const enemyTop = center.y + half.y;
   return (
-    pMin.x < rMax.x &&
-    pMax.x > rMin.x &&
-    pMin.y < rMax.y &&
-    pMax.y > rMin.y &&
-    pMin.z < rMax.z &&
-    pMax.z > rMin.z
+    player.velocity.y <= 0.35 &&
+    feetY >= enemyTop - 0.2 &&
+    feetY <= enemyTop + 0.42
   );
 }
 
-/** Compact collider for small Sapoti sprites */
-const SAPOTI_HALF = { x: 0.22, y: 0.32, z: 0.18 };
+/**
+ * @param {import('./player.js').Player} player
+ * @param {THREE.Vector3} center
+ * @param {{ x: number, y: number, z: number }} half
+ */
+function sapotiCanStealNecklace(player, center, half) {
+  if (!player.hasNecklace) return false;
+
+  const px = player.position.x;
+  const py = player.position.y;
+  const pz = player.position.z;
+
+  // Tight core overlap — grazing edge contact does not count.
+  const stealPlayerX = PLAYER_HALF.x * 0.42;
+  const stealPlayerZ = PLAYER_HALF.z * 0.42;
+  const stealSapotiX = half.x * 0.48;
+  const stealSapotiZ = half.z * 0.48;
+
+  const dx = Math.abs(px - center.x);
+  const dz = Math.abs(pz - center.z);
+  const overlapX = stealPlayerX + stealSapotiX - dx;
+  const overlapZ = stealPlayerZ + stealSapotiZ - dz;
+  if (overlapX <= 0 || overlapZ <= 0) return false;
+  if (overlapX < 0.16 || overlapZ < 0.14) return false;
+
+  const playerFeet = py - PLAYER_HALF.y;
+  const sapotiFeet = center.y - half.y;
+  if (Math.abs(sapotiFeet - playerFeet) > 0.28) return false;
+
+  const sapotiMin = center.y - half.y;
+  const sapotiTop = center.y + half.y;
+  const grabMin = playerFeet + 0.58;
+  const grabMax = playerFeet + 1.12;
+  if (sapotiTop < grabMin) return false;
+  if (sapotiMin > grabMax) return false;
+
+  return true;
+}
 
 /**
  * Ground-level Sapotis under a rooftop (same xz as a box whose floor is above their feet)
@@ -125,7 +186,7 @@ function sapotiFeetUnderLowOverhang(x, z, feetY, colliders) {
  * @param {Array<{ min: { x, y, z }, max: { x, y, z } }>} colliders
  */
 function resolveSapotiSpot(s, colliders) {
-  const feetY = s.y - SAPOTI_HALF.y;
+  const feetY = s.feetY;
   if (!sapotiFeetUnderLowOverhang(s.x, s.z, feetY, colliders)) return s;
 
   const step = 0.45;
@@ -156,18 +217,18 @@ function resolveSapotiSpot(s, colliders) {
 /**
  * @param {THREE.Scene} scene
  * @param {Array<{ min: { x, y, z }, max: { x, y, z } }> | null} [colliders] level boxes; when set, homes are kept out from under roof overhangs at ground level.
- * @returns {Promise<Array<{ mesh: THREE.Group, alive: boolean, home: THREE.Vector3, patrolRadius: number, patrolSpeed: number, phase: number, center: THREE.Vector3, half: typeof SAPOTI_HALF }>>}
+ * @returns {Promise<Array<{ mesh: THREE.Group, alive: boolean, home: THREE.Vector3, patrolRadius: number, patrolSpeed: number, phase: number, center: THREE.Vector3, half: { x: number, y: number, z: number } }>>}
  */
 export function spawnRobots(scene, colliders = null) {
   const spots = [
-    { x: 3.0, y: 0.32, z: -2.1, r: 1.0, spd: 1.1 },
-    { x: -2.8, y: 0.32, z: -1.2, r: 0.95, spd: 0.9 },
-    { x: -3.5, y: 0.32, z: -2.4, r: 0.85, spd: 1.2 },
-    { x: 1.2, y: 1.37, z: -6, r: 0.55, spd: 1.0 },
-    { x: 4.2, y: 2.22, z: -11, r: 0.55, spd: 1.15 },
-    { x: 0.2, y: 3.05, z: -16, r: 0.5, spd: 0.95 },
-    { x: -3.8, y: 3.93, z: -20, r: 0.45, spd: 1.0 },
-    { x: 11, y: 0.32, z: 1.5, r: 1.0, spd: 0.85 },
+    { x: 3.0, feetY: 0, z: -2.1, r: 1.0, spd: 1.1 },
+    { x: -2.8, feetY: 0, z: -1.2, r: 0.95, spd: 0.9 },
+    { x: -3.5, feetY: 0, z: -2.4, r: 0.85, spd: 1.2 },
+    { x: 1.2, feetY: 1.05, z: -6, r: 0.55, spd: 1.0 },
+    { x: 4.2, feetY: 1.9, z: -11, r: 0.55, spd: 1.15 },
+    { x: 0.2, feetY: 2.73, z: -16, r: 0.5, spd: 0.95 },
+    { x: -3.8, feetY: 3.61, z: -20, r: 0.45, spd: 1.0 },
+    { x: 11, feetY: 0, z: 1.5, r: 1.0, spd: 0.85 },
   ];
 
   return new Promise((resolve, reject) => {
@@ -181,8 +242,9 @@ export function spawnRobots(scene, colliders = null) {
         const map = textureFromCanvas(canvas);
 
         const aspect = img.width / img.height;
-        const height = 0.78;
+        const height = SAPOTI_SPRITE_H;
         const width = height * aspect;
+        const half = { x: width * 0.46, y: height * 0.5, z: 0.24 };
         const geo = new THREE.PlaneGeometry(width, height);
         const mat = new THREE.MeshBasicMaterial({
           map,
@@ -195,22 +257,25 @@ export function spawnRobots(scene, colliders = null) {
         const robots = [];
         for (const s0 of spots) {
           const s = colliders ? resolveSapotiSpot(s0, colliders) : s0;
+          const centerY = s.feetY + height / 2;
           const group = new THREE.Group();
           group.name = 'Sapoti';
           const plane = new THREE.Mesh(geo, mat);
+          plane.position.y = height / 2;
           group.add(plane);
-          group.position.set(s.x, s.y, s.z);
+          group.position.set(s.x, s.feetY, s.z);
           scene.add(group);
 
+          const home = new THREE.Vector3(s.x, centerY, s.z);
           robots.push({
             mesh: group,
             alive: true,
-            home: new THREE.Vector3(s.x, s.y, s.z),
+            home,
             patrolRadius: s.r,
             patrolSpeed: s.spd,
             phase: Math.random() * Math.PI * 2,
-            center: new THREE.Vector3(s.x, s.y, s.z),
-            half: SAPOTI_HALF,
+            center: home.clone(),
+            half,
           });
         }
         resolve(robots);
@@ -230,8 +295,11 @@ export function spawnRobots(scene, colliders = null) {
  * @param {import('./player.js').Player} player
  * @param {THREE.Camera} camera
  * @param {Array<{ min: { x, y, z }, max: { x, y, z } }> | null} [colliders]
+ * @returns {boolean} true if a Sapoti stole the player's necklace this frame
  */
 export function tickRobots(dt, robots, player, camera, colliders = null) {
+  let necklaceStolen = false;
+
   for (const r of robots) {
     if (!r.alive) continue;
 
@@ -245,33 +313,26 @@ export function tickRobots(dt, robots, player, camera, colliders = null) {
       nx = r.home.x;
       nz = r.home.z;
     }
-    r.mesh.position.set(nx, r.home.y, nz);
-    r.center.copy(r.mesh.position);
+    r.mesh.position.set(nx, sapotiFeetY, nz);
+    r.center.set(nx, r.home.y, nz);
 
     const dx = camera.position.x - r.center.x;
     const dz = camera.position.z - r.center.z;
     r.mesh.rotation.y = Math.atan2(dx, dz);
 
-    const px = player.position.x;
-    const py = player.position.y;
-    const pz = player.position.z;
-
-    if (!aabbOverlapPlayer(r.center, r.half, px, py, pz)) continue;
-
-    const feetY = py - PLAYER_HALF.y;
-    const enemyTop = r.center.y + r.half.y;
-    const stomp =
-      player.velocity.y <= 0.35 &&
-      feetY >= enemyTop - 0.2 &&
-      feetY <= enemyTop + 0.42;
-
-    if (stomp) {
+    if (isPlayerStompingSapoti(player, r.center, r.half)) {
+      const enemyTop = r.center.y + r.half.y;
       r.alive = false;
       r.mesh.visible = false;
       player.velocity.y = 6.2;
       player.position.y = enemyTop + PLAYER_HALF.y + 0.03;
+    } else if (sapotiCanStealNecklace(player, r.center, r.half)) {
+      player.loseNecklace();
+      necklaceStolen = true;
     }
   }
+
+  return necklaceStolen;
 }
 
 export function resetRobots(robots) {
@@ -279,7 +340,8 @@ export function resetRobots(robots) {
     r.alive = true;
     r.mesh.visible = true;
     r.phase = Math.random() * Math.PI * 2;
-    r.mesh.position.copy(r.home);
+    const feetY = r.home.y - r.half.y;
+    r.mesh.position.set(r.home.x, feetY, r.home.z);
     r.center.copy(r.home);
   }
 }

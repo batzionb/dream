@@ -253,8 +253,5 @@ export function buildLevel(scene) {
   // Goal — lit zinc & gold (Hôtel particulier accent)
   addParisBuilding(12, 7.1, -2, 4, 0.6, 4, 0xffe8c4, 0xffb020, 0.38, { isGoal: true });
 
-  addParisBuilding(-14, 4, 6, 2, 0.4, 2, 0xe8e2d8);
-  addParisBuilding(8, 3.2, 8, 2.5, 0.4, 2.5, 0xdfd8cc);
-
   return { colliders, root };
 }

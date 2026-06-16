@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createRenaRougeModel } from './renaRougeModel.js';
 
 export const PLAYER_HALF = { x: 0.4, y: 0.8, z: 0.4 };
 
@@ -6,7 +7,6 @@ export const PLAYER_HALF = { x: 0.4, y: 0.8, z: 0.4 };
 
 /** Resolved at runtime so the texture loads from the same origin as this module. */
 const LADYBUG_TEX_URL = new URL('../assets/ladybug.png', import.meta.url).href;
-const RENAROUGE_TEX_URL = new URL('../assets/renarouge.png', import.meta.url).href;
 
 function playerAabb(center) {
   return {
@@ -62,85 +62,12 @@ function canvasFromImageKeyBlack(img) {
   return canvas;
 }
 
-/**
- * Key out background using colors sampled from the image edge (checkerboard, gray studio, etc.).
- * @param {HTMLImageElement | ImageBitmap} img
- * @param {number} [tolerance=52] RGB distance 0–441
- * @returns {HTMLCanvasElement}
- */
-function canvasFromImageKeyBorderBackground(img, tolerance = 52) {
-  const w = img.width;
-  const h = img.height;
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return canvas;
-
-  ctx.drawImage(img, 0, 0);
-  const data = ctx.getImageData(0, 0, w, h);
-  const p = data.data;
-
-  const step = Math.max(1, Math.min(6, Math.floor(Math.max(w, h) / 120)));
-  /** @type {number[][]} */
-  const palette = [];
-
-  function pushPalette(r, g, b) {
-    for (let j = 0; j < palette.length; j++) {
-      const c = palette[j];
-      if (Math.hypot(r - c[0], g - c[1], b - c[2]) < 26) return;
-    }
-    if (palette.length < 150) {
-      palette.push([r, g, b]);
-    }
-  }
-
-  function sampleEdge(x, y) {
-    const xi = Math.min(w - 1, Math.max(0, x));
-    const yi = Math.min(h - 1, Math.max(0, y));
-    const idx = (yi * w + xi) * 4;
-    pushPalette(p[idx], p[idx + 1], p[idx + 2]);
-  }
-
-  for (let x = 0; x < w; x += step) {
-    sampleEdge(x, 0);
-    sampleEdge(x, h - 1);
-  }
-  for (let y = 0; y < h; y += step) {
-    sampleEdge(0, y);
-    sampleEdge(w - 1, y);
-  }
-
-  if (palette.length === 0) {
-    return canvas;
-  }
-
-  for (let i = 0; i < p.length; i += 4) {
-    const r = p[i];
-    const g = p[i + 1];
-    const b = p[i + 2];
-    if (p[i + 3] < 8) continue;
-
-    let minD = Infinity;
-    for (let k = 0; k < palette.length; k++) {
-      const c = palette[k];
-      const d = Math.hypot(r - c[0], g - c[1], b - c[2]);
-      if (d < minD) minD = d;
-    }
-    if (minD < tolerance) {
-      p[i + 3] = 0;
-    } else if (r < 22 && g < 22 && b < 22) {
-      p[i + 3] = 0;
-    }
-  }
-
-  ctx.putImageData(data, 0, 0);
-  return canvas;
-}
+const SPRITE_HEIGHT = 1.68;
+/** Align sprite feet with the physics collider bottom. */
+const SPRITE_FEET_OFFSET = PLAYER_HALF.y - SPRITE_HEIGHT / 2;
 
 function canvasFromImage(img, keyMode) {
   if (keyMode === 'black') return canvasFromImageKeyBlack(img);
-  if (keyMode === 'border') return canvasFromImageKeyBorderBackground(img);
   const canvas = document.createElement('canvas');
   canvas.width = img.width;
   canvas.height = img.height;
@@ -158,7 +85,7 @@ function textureFromCanvas(canvas) {
 }
 
 /**
- * @param {'black' | 'border' | 'none'} keyMode — how to remove / use background
+ * @param {'black' | 'none'} keyMode — how to remove / use background
  */
 function createBillboardFromImage(scene, start, url, groupName, keyMode) {
   const group = new THREE.Group();
@@ -175,18 +102,18 @@ function createBillboardFromImage(scene, start, url, groupName, keyMode) {
 
       const canvas = canvasFromImage(img, keyMode);
       const map = textureFromCanvas(canvas);
-      const aspect = img.width / img.height;
-      const height = 1.68;
-      const width = height * aspect;
-      const geo = new THREE.PlaneGeometry(width, height);
+      const aspect = canvas.width / canvas.height;
+      const width = SPRITE_HEIGHT * aspect;
+      const geo = new THREE.PlaneGeometry(width, SPRITE_HEIGHT);
       const mat = new THREE.MeshBasicMaterial({
         map,
         transparent: true,
-        alphaTest: 0.02,
+        alphaTest: 0.08,
         side: THREE.DoubleSide,
         depthWrite: true,
       });
       const plane = new THREE.Mesh(geo, mat);
+      plane.position.y = SPRITE_FEET_OFFSET;
       group.add(plane);
     },
     undefined,
@@ -200,10 +127,6 @@ function createLadybugBillboard(scene, start) {
   return createBillboardFromImage(scene, start, LADYBUG_TEX_URL, 'Ladybug', 'black');
 }
 
-function createRenaRougeBillboard(scene, start) {
-  return createBillboardFromImage(scene, start, RENAROUGE_TEX_URL, 'RenaRouge', 'border');
-}
-
 /**
  * @param {THREE.Scene} scene
  * @param {THREE.Vector3} start
@@ -212,7 +135,7 @@ function createRenaRougeBillboard(scene, start) {
 export function createPlayerVisual(scene, start, id) {
   switch (id) {
     case 'renarouge':
-      return createRenaRougeBillboard(scene, start);
+      return createRenaRougeModel(scene, start);
     case 'ladybug':
     default:
       return createLadybugBillboard(scene, start);
@@ -224,8 +147,9 @@ export class Player {
    * @param {THREE.Scene} scene
    * @param {THREE.Vector3} start
    * @param {CharacterId} [characterId='ladybug']
+   * @param {Array<{ min: { x: number, y: number, z: number }, max: { x: number, y: number, z: number } }>} [colliders]
    */
-  constructor(scene, start, characterId = 'ladybug') {
+  constructor(scene, start, characterId = 'ladybug', colliders = null) {
     this.position = new THREE.Vector3(start.x, start.y, start.z);
     this.velocity = new THREE.Vector3();
     this.grounded = false;
@@ -237,8 +161,38 @@ export class Player {
 
     /** @type {CharacterId} */
     this.characterId = characterId === 'renarouge' ? 'renarouge' : 'ladybug';
+    this.hasNecklace = this.characterId === 'renarouge';
+
+    if (colliders) {
+      this.snapToGround(colliders);
+    }
 
     this.mesh = createPlayerVisual(scene, this.position, this.characterId);
+    this.mesh.position.copy(this.position);
+  }
+
+  /**
+   * Place feet on the highest supporting surface under the spawn point.
+   * @param {Array<{ min: { x: number, y: number, z: number }, max: { x: number, y: number, z: number } }>} colliders
+   */
+  snapToGround(colliders) {
+    const p = playerAabb(this.position);
+    let bestTop = -Infinity;
+
+    for (const c of colliders) {
+      if (p.min.x >= c.max.x || p.max.x <= c.min.x || p.min.z >= c.max.z || p.max.z <= c.min.z) {
+        continue;
+      }
+      if (c.max.y > bestTop && c.max.y <= this.position.y - PLAYER_HALF.y + 0.05) {
+        bestTop = c.max.y;
+      }
+    }
+
+    if (bestTop > -Infinity) {
+      this.position.y = bestTop + PLAYER_HALF.y + 1e-4;
+      this.velocity.y = 0;
+      this.grounded = true;
+    }
   }
 
   /**
@@ -356,6 +310,15 @@ export class Player {
       }
       Object.assign(p, playerAabb(this.position));
     }
+  }
+
+  /** Sapotis snatched the Fox Miraculous — hide it on Rena Rouge. */
+  loseNecklace() {
+    if (!this.hasNecklace) return;
+    this.hasNecklace = false;
+    this.mesh.traverse((o) => {
+      if (o.name === 'FoxMiraculous') o.visible = false;
+    });
   }
 
   /** True when grounded on the marked goal platform. */

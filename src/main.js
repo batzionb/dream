@@ -52,6 +52,7 @@ const HUD_TEMPLATE = hud.innerHTML;
 let player = null;
 let clock = new THREE.Clock();
 let won = false;
+let lost = false;
 let gameStarted = false;
 
 hud.style.visibility = 'hidden';
@@ -127,8 +128,9 @@ document.getElementById('menuStart')?.addEventListener('click', () => {
   tryRemoveOldPlayer();
   resetRobots(robots);
   won = false;
+  lost = false;
   clock = new THREE.Clock();
-  player = new Player(scene, new THREE.Vector3(0, 0.8, 0), selectedCharacter);
+  player = new Player(scene, new THREE.Vector3(0, 0.8, 0), selectedCharacter, colliders);
   gameStarted = true;
   hud.innerHTML = HUD_TEMPLATE;
   hud.style.visibility = 'visible';
@@ -141,12 +143,17 @@ function tick() {
 
   if (!gameStarted) {
     applyMenuCamera();
-  } else if (player && !won) {
+  } else if (player && !won && !lost) {
     player.update(dt, input, colliders, camState.yaw, camera);
-    tickRobots(dt, robots, player, camera, colliders);
+    const necklaceStolen = tickRobots(dt, robots, player, camera, colliders);
     updateCombatHud();
 
-    if (player.isOnGoal(colliders)) {
+    if (necklaceStolen) {
+      lost = true;
+      hud.innerHTML =
+        '<strong>A Sapoti stole the Miraculous!</strong><br />Sapotis win — refresh to play again.';
+      if (document.exitPointerLock) document.exitPointerLock();
+    } else if (player.isOnGoal(colliders)) {
       won = true;
       hud.innerHTML =
         '<strong>You reached the goal!</strong><br />Refresh the page to play again.';
